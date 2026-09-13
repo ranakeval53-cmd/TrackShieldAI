@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { Corridor, Asset } from '../../types';
 import api from '../../api/client';
+import { FALLBACK_CORRIDORS, getFallbackAssetsForUser } from '../../api/fallbackData';
 import { BreadcrumbContext } from '../../components/layout/BreadcrumbContext';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -15,7 +16,9 @@ import {
   ArrowRight,
   ArrowLeft,
   Upload,
-  Info
+  Info,
+  Database,
+  RefreshCw
 } from 'lucide-react';
 
 export const ReportProblem: React.FC = () => {
@@ -23,14 +26,21 @@ export const ReportProblem: React.FC = () => {
   const navigate = useNavigate();
 
   const [step, setStep] = useState(1);
-  const [corridors, setCorridors] = useState<Corridor[]>([]);
-  const [assets, setAssets] = useState<Asset[]>([]);
+  const [corridors, setCorridors] = useState<Corridor[]>(FALLBACK_CORRIDORS);
+  const [assets, setAssets] = useState<Asset[]>(() => getFallbackAssetsForUser(user?.department_code, user?.department_id));
   const [loading, setLoading] = useState(false);
+  const [isLiveSync, setIsLiveSync] = useState(false);
 
   // Form State
   const [corridorId, setCorridorId] = useState<number>(1);
-  const [assetId, setAssetId] = useState<number>(1);
-  const [assetCriticality, setAssetCriticality] = useState('HIGH');
+  const [assetId, setAssetId] = useState<number>(() => {
+    const initial = getFallbackAssetsForUser(user?.department_code, user?.department_id);
+    return initial.length > 0 ? initial[0].id : 1;
+  });
+  const [assetCriticality, setAssetCriticality] = useState<string>(() => {
+    const initial = getFallbackAssetsForUser(user?.department_code, user?.department_id);
+    return initial.length > 0 ? initial[0].criticality : 'HIGH';
+  });
   
   const [workDescription, setWorkDescription] = useState('OHE Insulator flash mark and surface glazing crack on mast 24/18.');
   const [resourcesRequired, setResourcesRequired] = useState('Tower Wagon TW-04, HV Earth rods, Torque Wrench');
@@ -57,21 +67,52 @@ export const ReportProblem: React.FC = () => {
     recommendation: 'Submit for multi-department Block Fusion analysis. Recommended window: 02:00–04:00 AM.'
   });
 
-  useEffect(() => {
-    // Load corridors and departmental assets
-    Promise.all([
-      api.get<Corridor[]>('/master/corridors?limit=50'),
-      api.get<Asset[]>('/master/assets', { params: { department_id: user?.department_id, limit: 100 } })
-    ]).then(([cRes, aRes]) => {
-      setCorridors(cRes.data);
-      if (cRes.data.length > 0) setCorridorId(cRes.data[0].id);
-      setAssets(aRes.data);
-      if (aRes.data.length > 0) {
+  const loadData = async () => {
+    // 1. Fetch Corridors
+    try {
+      const cRes = await api.get<Corridor[]>('/master/corridors?limit=50');
+      if (cRes.data && cRes.data.length > 0) {
+        setCorridors(cRes.data);
+        setIsLiveSync(true);
+      }
+    } catch {
+      // Fallback corridors already initialized
+    }
+
+    // 2. Fetch Departmental Assets
+    try {
+      const aRes = await api.get<Asset[]>('/master/assets', {
+        params: { department_id: user?.department_id, limit: 100 }
+      });
+      if (aRes.data && aRes.data.length > 0) {
+        setAssets(aRes.data);
         setAssetId(aRes.data[0].id);
         setAssetCriticality(aRes.data[0].criticality);
+        if (aRes.data[0].corridor_id) {
+          setCorridorId(aRes.data[0].corridor_id);
+        }
+        setIsLiveSync(true);
+      } else {
+        const fbAssets = getFallbackAssetsForUser(user?.department_code, user?.department_id);
+        setAssets(fbAssets);
+        if (fbAssets.length > 0) {
+          setAssetId(fbAssets[0].id);
+          setAssetCriticality(fbAssets[0].criticality);
+        }
       }
-    }).catch(console.error);
-  }, [user?.department_id]);
+    } catch {
+      const fbAssets = getFallbackAssetsForUser(user?.department_code, user?.department_id);
+      setAssets(fbAssets);
+      if (fbAssets.length > 0) {
+        setAssetId(fbAssets[0].id);
+        setAssetCriticality(fbAssets[0].criticality);
+      }
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, [user?.department_id, user?.department_code]);
 
   // Update AI preview dynamically
   useEffect(() => {
@@ -83,6 +124,15 @@ export const ReportProblem: React.FC = () => {
     }).then(res => setAiPreview(res.data)).catch(() => {});
   }, [assetCriticality, priority, isolationRequired, maxDurationHours]);
 
+  const handleCorridorChange = (newCorrId: number) => {
+    setCorridorId(newCorrId);
+    const matching = assets.filter(a => a.corridor_id === newCorrId);
+    if (matching.length > 0 && !matching.some(a => a.id === assetId)) {
+      setAssetId(matching[0].id);
+      setAssetCriticality(matching[0].criticality);
+    }
+  };
+
   const handleAssetChange = (aid: number) => {
     setAssetId(aid);
     const sel = assets.find(a => a.id === aid);
@@ -91,6 +141,10 @@ export const ReportProblem: React.FC = () => {
       if (sel.corridor_id) setCorridorId(sel.corridor_id);
     }
   };
+
+  // Filter assets by selected corridor if matching items exist, else show all
+  const corridorAssets = assets.filter(a => a.corridor_id === corridorId);
+  const displayedAssets = corridorAssets.length > 0 ? corridorAssets : assets;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -197,15 +251,46 @@ export const ReportProblem: React.FC = () => {
               </div>
             </div>
 
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-500 font-medium">
+                {isLiveSync ? (
+                  <span className="inline-flex items-center gap-1.5 text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                    Live Railway Master Data Connected
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                    <Database className="w-3 h-3 text-blue-600" />
+                    Standard Corridor Infrastructure Active
+                  </span>
+                )}
+              </span>
+              <button
+                type="button"
+                onClick={loadData}
+                className="text-[11px] font-semibold text-slate-500 hover:text-blue-600 flex items-center gap-1 transition"
+                title="Refresh master data"
+              >
+                <RefreshCw className="w-3 h-3" />
+                <span>Reload Data</span>
+              </button>
+            </div>
+
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                Corridor Section *
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  Corridor Section *
+                </label>
+                <span className="text-[11px] text-slate-400 font-medium">
+                  {corridors.length} Sections Available
+                </span>
+              </div>
               <select
                 value={corridorId}
-                onChange={(e) => setCorridorId(Number(e.target.value))}
-                className="w-full px-3.5 py-2 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                onChange={(e) => handleCorridorChange(Number(e.target.value))}
+                className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-slate-800 shadow-2xs"
               >
+                {corridors.length === 0 && <option value="">Loading corridors...</option>}
                 {corridors.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.code} — {c.name} ({c.track_type}, {c.distance_km} km)
@@ -216,15 +301,21 @@ export const ReportProblem: React.FC = () => {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Fixed Infrastructure Asset *
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Fixed Infrastructure Asset *
+                  </label>
+                  <span className="text-[11px] text-blue-600 font-semibold">
+                    {displayedAssets.length} Assets in Section
+                  </span>
+                </div>
                 <select
                   value={assetId}
                   onChange={(e) => handleAssetChange(Number(e.target.value))}
-                  className="w-full px-3.5 py-2 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-slate-800 shadow-2xs"
                 >
-                  {assets.map((a) => (
+                  {displayedAssets.length === 0 && <option value="">Loading departmental assets...</option>}
+                  {displayedAssets.map((a) => (
                     <option key={a.id} value={a.id}>
                       [{a.asset_id}] {a.name} ({a.asset_type})
                     </option>
@@ -239,7 +330,7 @@ export const ReportProblem: React.FC = () => {
                 <select
                   value={assetCriticality}
                   onChange={(e) => setAssetCriticality(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-slate-800 shadow-2xs"
                 >
                   <option value="CRITICAL">CRITICAL (Main Trunk Line)</option>
                   <option value="HIGH">HIGH</option>

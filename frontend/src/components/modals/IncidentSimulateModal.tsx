@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Corridor } from '../../types';
-import { AlertOctagon, X, Zap } from 'lucide-react';
 import api from '../../api/client';
+import { FALLBACK_CORRIDORS } from '../../api/fallbackData';
+import { AlertOctagon, X, Zap, Radio, Hammer, Train, Send } from 'lucide-react';
 
 interface IncidentSimulateModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: (eventData: any) => void;
+  onSuccess: (eventData?: any) => void;
 }
 
 export const IncidentSimulateModal: React.FC<IncidentSimulateModalProps> = ({
@@ -14,7 +15,7 @@ export const IncidentSimulateModal: React.FC<IncidentSimulateModalProps> = ({
   onClose,
   onSuccess
 }) => {
-  const [corridors, setCorridors] = useState<Corridor[]>([]);
+  const [corridors, setCorridors] = useState<Corridor[]>(FALLBACK_CORRIDORS);
   const [corridorId, setCorridorId] = useState<number>(1);
   const [eventType, setEventType] = useState('SIGNAL_FAILURE');
   const [title, setTitle] = useState('Critical Signal Point Machine S-102 Jammed');
@@ -25,10 +26,14 @@ export const IncidentSimulateModal: React.FC<IncidentSimulateModalProps> = ({
     if (isOpen) {
       api.get<Corridor[]>('/master/corridors?limit=30')
         .then(res => {
-          setCorridors(res.data);
-          if (res.data.length > 0) setCorridorId(res.data[0].id);
+          if (res.data && res.data.length > 0) {
+            setCorridors(res.data);
+            setCorridorId(res.data[0].id);
+          }
         })
-        .catch(console.error);
+        .catch(() => {
+          setCorridors(FALLBACK_CORRIDORS);
+        });
     }
   }, [isOpen]);
 

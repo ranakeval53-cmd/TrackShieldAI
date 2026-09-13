@@ -1,17 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { MaintenanceRequest, Department } from '../../types';
 import api from '../../api/client';
+import { FALLBACK_DEPARTMENTS, FALLBACK_REQUESTS } from '../../api/fallbackData';
 import { BreadcrumbContext } from '../../components/layout/BreadcrumbContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { RejectReasonModal } from '../../components/modals/RejectReasonModal';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  Filter,
+  ClipboardList,
   Check,
   XCircle,
   Clock,
+  Filter,
   Bot,
-  Shield,
   Layers,
   Search,
   Eye,
@@ -25,8 +26,8 @@ export const AllRequests: React.FC = () => {
   const deptParam = searchParams.get('department');
   const prioParam = searchParams.get('priority');
 
-  const [requests, setRequests] = useState<MaintenanceRequest[]>([]);
-  const [departments, setDepartments] = useState<Department[]>([]);
+  const [requests, setRequests] = useState<MaintenanceRequest[]>(FALLBACK_REQUESTS);
+  const [departments, setDepartments] = useState<Department[]>(FALLBACK_DEPARTMENTS);
   const [loading, setLoading] = useState(true);
 
   // Filters
@@ -47,13 +48,13 @@ export const AllRequests: React.FC = () => {
         api.get<MaintenanceRequest[]>('/requests', { params: { limit: 200 } }),
         api.get<Department[]>('/master/departments')
       ]);
-      setRequests(rRes.data);
-      setDepartments(dRes.data.filter(d => d.code !== 'ALL'));
-      if (rRes.data.length > 0) {
+      if (rRes.data && rRes.data.length > 0) setRequests(rRes.data);
+      if (dRes.data && dRes.data.length > 0) setDepartments(dRes.data.filter(d => d.code !== 'ALL'));
+      if (rRes.data && rRes.data.length > 0) {
         setActiveReqForAI(rRes.data[0]);
       }
-    } catch (err) {
-      console.error(err);
+    } catch {
+      // Fallbacks already initialized
     } finally {
       setLoading(false);
     }

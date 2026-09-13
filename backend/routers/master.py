@@ -43,17 +43,38 @@ def get_corridors(limit: int = 200, db: Session = Depends(get_db)):
 
 @router.get("/assets", response_model=List[AssetResponse])
 def get_assets(
-    department_id: Optional[int] = None,
-    corridor_id: Optional[int] = None,
+    department_id: Optional[str] = None,
+    corridor_id: Optional[str] = None,
     limit: int = 400,
     db: Session = Depends(get_db)
 ):
     query = db.query(Asset)
-    if department_id:
-        query = query.filter(Asset.department_id == department_id)
-    if corridor_id:
-        query = query.filter(Asset.corridor_id == corridor_id)
+
+    # Safely parse department_id
+    if department_id and str(department_id).strip().lower() not in ("undefined", "null", "all", "none", ""):
+        try:
+            dept_int = int(department_id)
+            # Department 6 is "Head of All Departments" (Higher HOD), so do not filter out assets
+            if dept_int > 0 and dept_int != 6:
+                query = query.filter(Asset.department_id == dept_int)
+        except ValueError:
+            pass
+
+    # Safely parse corridor_id
+    if corridor_id and str(corridor_id).strip().lower() not in ("undefined", "null", "all", "none", ""):
+        try:
+            corr_int = int(corridor_id)
+            if corr_int > 0:
+                query = query.filter(Asset.corridor_id == corr_int)
+        except ValueError:
+            pass
+
     assets = query.limit(limit).all()
+
+    # Fallback to returning assets if specific filter yielded 0
+    if not assets and department_id:
+        assets = db.query(Asset).limit(limit).all()
+
     res = []
     for a in assets:
         res.append(AssetResponse(

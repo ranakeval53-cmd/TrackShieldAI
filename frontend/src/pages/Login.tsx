@@ -74,6 +74,17 @@ export const Login: React.FC = () => {
     setRole(acc.role);
   };
 
+  const handleRoleChange = (newRole: string) => {
+    setRole(newRole);
+    if (newRole === 'Lower HOD' && empId === 'hod001') {
+      setEmpId('elec001');
+      setPassword('elec123');
+    } else if (newRole === 'Higher HOD' && empId !== 'hod001') {
+      setEmpId('hod001');
+      setPassword('hod123');
+    }
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -82,7 +93,9 @@ export const Login: React.FC = () => {
     try {
       const success = await login(empId, role);
       if (success) {
-        if (role === 'Higher HOD' || empId === 'hod001') {
+        if (role === 'Higher HOD' && empId === 'hod001') {
+          navigate('/higher/dashboard');
+        } else if (empId === 'hod001') {
           navigate('/higher/dashboard');
         } else {
           navigate('/lower/dashboard');
@@ -246,8 +259,8 @@ export const Login: React.FC = () => {
               </label>
               <select
                 value={role}
-                onChange={(e) => setRole(e.target.value)}
-                className="w-full px-3.5 py-2 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                onChange={(e) => handleRoleChange(e.target.value)}
+                className="w-full px-3.5 py-2 rounded-lg border border-slate-300 text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-slate-800"
               >
                 <option value="Higher HOD">Higher HOD (Head of All Departments)</option>
                 <option value="Lower HOD">Lower HOD (Department Specific)</option>
