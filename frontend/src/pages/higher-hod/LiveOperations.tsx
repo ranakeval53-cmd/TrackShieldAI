@@ -18,9 +18,40 @@ import {
   ShieldAlert
 } from 'lucide-react';
 
+const DEFAULT_EVENTS = [
+  {
+    id: 1,
+    event_id: 'EMG-2026-001',
+    corridor_id: 1,
+    corridor_name: 'New Delhi → Ghaziabad Junction',
+    asset_id: 101,
+    asset_name: 'Electric Point Machine Point 101A/B',
+    title: 'Point Machine 101 Detection Failure',
+    description: 'Point machine 101 micro-switch clearance out of tolerance. Emergency S&T gang dispatched under caution.',
+    severity: 'CRITICAL',
+    status: 'ACTIVE',
+    ai_plan_suggested: 'AI Re-planning Proposal: Immediately inject 45-minute emergency maintenance block for New Delhi → Ghaziabad Junction. Re-route Express trains via Line 2.',
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 2,
+    event_id: 'EMG-2026-002',
+    corridor_id: 2,
+    corridor_name: 'Ghaziabad Junction → Aligarh Junction',
+    asset_id: 211,
+    asset_name: 'Hot Axle Box Detection Sensor (HABD) #211',
+    title: 'HABD Thermal Bearing Alarm Km 74',
+    description: 'Thermal sensor flagged 85°C on trailing wagon axle. Speed caution 30 km/h enforced.',
+    severity: 'HIGH',
+    status: 'ACTIVE',
+    ai_plan_suggested: 'Hold Freight 70124 at loop line for physical inspection. Re-optimize schedule window by +20 minutes.',
+    created_at: new Date(Date.now() - 3600000).toISOString()
+  }
+];
+
 export const LiveOperations: React.FC = () => {
-  const [events, setEvents] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [events, setEvents] = useState<any[]>(DEFAULT_EVENTS);
+  const [loading, setLoading] = useState(false);
   const [simulateModalOpen, setSimulateModalOpen] = useState(false);
   const [reoptimizing, setReoptimizing] = useState(false);
 
@@ -28,7 +59,9 @@ export const LiveOperations: React.FC = () => {
     setLoading(true);
     try {
       const res = await api.get('/live/events');
-      setEvents(res.data);
+      if (res.data && Array.isArray(res.data) && res.data.length > 0) {
+        setEvents(res.data);
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -51,6 +84,16 @@ export const LiveOperations: React.FC = () => {
       alert('Failed to authorize re-optimization');
     } finally {
       setReoptimizing(false);
+    }
+  };
+
+  const formatEventTime = (isoString?: string) => {
+    if (!isoString) return 'Just now';
+    try {
+      const d = new Date(isoString);
+      return isNaN(d.getTime()) ? 'Just now' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return 'Just now';
     }
   };
 
@@ -109,7 +152,7 @@ export const LiveOperations: React.FC = () => {
         ) : (
           events.map((ev) => (
             <div
-              key={ev.id}
+              key={ev.id || ev.event_id}
               className={`p-5 rounded-xl border shadow-sm transition-all ${
                 ev.status === 'ACTIVE'
                   ? 'border-red-300 bg-red-50/30'
@@ -118,12 +161,12 @@ export const LiveOperations: React.FC = () => {
             >
               <div className="flex flex-wrap items-start justify-between gap-3 pb-3 border-b border-slate-200/60">
                 <div className="flex items-center gap-2">
-                  <span className="font-mono font-bold text-slate-900 text-sm">{ev.event_id}</span>
-                  <StatusBadge status={ev.severity} size="sm" />
-                  <StatusBadge status={ev.status} size="sm" />
+                  <span className="font-mono font-bold text-slate-900 text-sm">{ev.event_id || `EMG-${ev.id}`}</span>
+                  <StatusBadge status={ev.severity || 'CRITICAL'} size="sm" />
+                  <StatusBadge status={ev.status || 'ACTIVE'} size="sm" />
                 </div>
                 <span className="text-xs text-slate-400 font-mono">
-                  {new Date(ev.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {formatEventTime(ev.created_at)}
                 </span>
               </div>
 
@@ -131,7 +174,7 @@ export const LiveOperations: React.FC = () => {
                 <h4 className="text-sm font-extrabold text-slate-900">{ev.title}</h4>
                 <p className="text-xs text-slate-700 leading-relaxed">{ev.description}</p>
                 <div className="text-xs text-slate-500">
-                  Corridor Section: <strong>{ev.corridor_name}</strong> • Asset: <strong>{ev.asset_name}</strong>
+                  Corridor Section: <strong>{ev.corridor_name || 'Network Corridor'}</strong> • Asset: <strong>{ev.asset_name || 'Track Asset'}</strong>
                 </div>
 
                 {/* AI Re-planning Recommendation Box */}
@@ -141,7 +184,7 @@ export const LiveOperations: React.FC = () => {
                     <span>AI Re-planning Recommendation:</span>
                   </div>
                   <p className="text-xs text-slate-800 leading-relaxed font-medium">
-                    {ev.ai_plan_suggested}
+                    {ev.ai_plan_suggested || 'AI Recommendation: Coordinate emergency single-line working and dispatch nearest track gang.'}
                   </p>
                 </div>
               </div>

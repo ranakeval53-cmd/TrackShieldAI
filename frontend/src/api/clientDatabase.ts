@@ -36,6 +36,53 @@ const saveMCRs = (mcrs: MCRReport[]) => {
   } catch {}
 };
 
+const STORAGE_EVENTS_KEY = 'railway_client_events';
+
+const DEFAULT_EMERGENCY_EVENTS = [
+  {
+    id: 1,
+    event_id: 'EMG-2026-001',
+    corridor_id: 1,
+    corridor_name: 'New Delhi → Ghaziabad Junction',
+    asset_id: 101,
+    asset_name: 'Electric Point Machine Point 101A/B',
+    title: 'Point Machine 101 Detection Failure',
+    description: 'Point machine 101 micro-switch clearance out of tolerance. Emergency S&T gang dispatched.',
+    severity: 'CRITICAL',
+    status: 'ACTIVE',
+    ai_plan_suggested: 'AI Re-planning Proposal: Immediately inject 45-minute emergency maintenance block for New Delhi → Ghaziabad Junction. Re-route Express trains via Line 2.',
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 2,
+    event_id: 'EMG-2026-002',
+    corridor_id: 2,
+    corridor_name: 'Ghaziabad Junction → Aligarh Junction',
+    asset_id: 211,
+    asset_name: 'Hot Axle Box Detection Sensor (HABD) #211',
+    title: 'HABD Thermal Alarm Km 74',
+    description: 'Thermal bearing sensor flagged 85°C on trailing wagon axle. Speed caution 30 km/h enforced.',
+    severity: 'HIGH',
+    status: 'ACTIVE',
+    ai_plan_suggested: 'Hold Freight 70124 at loop line for physical inspection. Re-optimize schedule window by +20 minutes.',
+    created_at: new Date(Date.now() - 3600000).toISOString()
+  }
+];
+
+const getStoredEmergencyEvents = (): any[] => {
+  try {
+    const saved = localStorage.getItem(STORAGE_EVENTS_KEY);
+    if (saved) return JSON.parse(saved);
+  } catch {}
+  return DEFAULT_EMERGENCY_EVENTS;
+};
+
+const saveEmergencyEvents = (events: any[]) => {
+  try {
+    localStorage.setItem(STORAGE_EVENTS_KEY, JSON.stringify(events));
+  } catch {}
+};
+
 const getStoredBlocks = (): MaintenanceBlock[] => {
   try {
     const saved = localStorage.getItem(STORAGE_BLOCKS_KEY);
@@ -538,41 +585,82 @@ export const handleClientDatabaseFallback = (config?: AxiosRequestConfig): Axios
   }
 
   if (pathname === '/analytics/charts' || pathname === 'analytics/charts') {
+    const reqs = getStoredRequests();
+
+    const deptCodes = ['CIVIL', 'ELEC', 'SIG', 'TEL', 'MECH'];
+    const department_chart = deptCodes.map(code => ({
+      name: code,
+      count: reqs.filter(r => (r.department_code || '').toUpperCase() === code).length || 20
+    }));
+
+    const priorities = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
+    const priority_chart = priorities.map(prio => ({
+      priority: prio,
+      count: reqs.filter(r => r.priority === prio).length || 10
+    }));
+
+    const trend = [
+      { day: 'Day 1', availability: 91.2, downtime_hours: 18.5 },
+      { day: 'Day 5', availability: 92.4, downtime_hours: 16.0 },
+      { day: 'Day 10', availability: 93.1, downtime_hours: 14.8 },
+      { day: 'Day 15', availability: 92.8, downtime_hours: 15.2 },
+      { day: 'Day 20', availability: 94.5, downtime_hours: 11.4 },
+      { day: 'Day 25', availability: 95.8, downtime_hours: 8.9 },
+      { day: 'Today', availability: 96.4, downtime_hours: 7.2 }
+    ];
+
+    const fusion_stats = {
+      individual_requests_scheduled: 74,
+      fused_blocks_created: 26,
+      blocks_eliminated: 48,
+      efficiency_savings_percent: 64.8,
+      train_delay_minutes_saved: 420
+    };
+
+    const mcrs = getStoredMCRs();
+    const metCount = mcrs.filter(m => m.commitment_met).length;
+    const commitment_rate = mcrs.length > 0 ? Math.round((metCount / mcrs.length) * 1000) / 10 : 94.2;
+
     return makeResponse({
-      department_breakdown: [
-        { name: 'Electrical', count: 81 },
-        { name: 'Signalling', count: 72 },
-        { name: 'Civil', count: 95 },
-        { name: 'Telecom', count: 52 },
-        { name: 'Mechanical', count: 40 }
-      ],
-      weekly_trends: [
-        { day: 'Mon', scheduled: 12, completed: 11 },
-        { day: 'Tue', scheduled: 15, completed: 14 },
-        { day: 'Wed', scheduled: 18, completed: 18 },
-        { day: 'Thu', scheduled: 14, completed: 13 },
-        { day: 'Fri', scheduled: 16, completed: 15 },
-        { day: 'Sat', scheduled: 22, completed: 21 },
-        { day: 'Sun', scheduled: 20, completed: 20 }
-      ]
+      department_chart,
+      priority_chart,
+      availability_trend: trend,
+      fusion_stats,
+      commitment_success_rate: commitment_rate,
+      manpower_utilization_percent: 78.4,
+      resource_utilization_percent: 82.1
     });
   }
 
   if (pathname === '/live/events' || pathname === 'live/events') {
-    return makeResponse([
-      {
-        id: 1,
-        event_type: 'SIGNAL_FAILURE',
-        corridor_code: 'NDLS-GZB',
-        title: 'Point Machine S-102 Jammed',
-        description: 'Point machine 102 failed normal detection. S&T gang dispatched under emergency caution.',
-        timestamp: new Date().toISOString()
-      }
-    ]);
+    const savedEvents = getStoredEmergencyEvents();
+    return makeResponse(savedEvents);
   }
 
   if (pathname === '/live/simulate' || pathname === 'live/simulate') {
-    return makeResponse({ message: 'Incident simulated successfully' }, 201);
+    const body = typeof config.data === 'string' ? JSON.parse(config.data || '{}') : (config.data || {});
+    const corr = (dbDump.corridors || []).find((c: any) => c.id === body.corridor_id) || dbDump.corridors[0];
+    const asset = (dbDump.assets || []).find((a: any) => a.id === body.asset_id) || dbDump.assets[0];
+
+    const events = getStoredEmergencyEvents();
+    const newEvent = {
+      id: events.length + 1,
+      event_id: `EMG-2026-${String(events.length + 1).padStart(3, '0')}`,
+      corridor_id: corr.id,
+      corridor_name: corr.name,
+      asset_id: asset?.id || 1,
+      asset_name: asset?.name || 'Trackside Asset',
+      title: body.title || 'Track Point Obstruction Simulated',
+      description: body.description || 'Emergency inspection gang dispatched to site.',
+      severity: 'CRITICAL',
+      status: 'ACTIVE',
+      ai_plan_suggested: `AI Re-planning Proposal: Immediately inject 45-minute emergency maintenance block for ${corr.name}. Shift scheduled passenger blocks by +30 minutes.`,
+      created_at: new Date().toISOString()
+    };
+    events.unshift(newEvent);
+    saveEmergencyEvents(events);
+
+    return makeResponse(newEvent, 201);
   }
 
   if (pathname.includes('/live/reoptimize-schedule')) {

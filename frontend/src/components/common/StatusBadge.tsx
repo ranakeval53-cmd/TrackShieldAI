@@ -5,8 +5,9 @@ interface StatusBadgeProps {
   size?: 'sm' | 'md';
 }
 
-export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, size = 'md' }) => {
-  const normalized = status.toUpperCase().replace(/\s+/g, '_');
+export const StatusBadge: React.FC<StatusBadgeProps> = ({ status = 'NORMAL', size = 'md' }) => {
+  const safeStatus = typeof status === 'string' ? status : String(status || 'NORMAL');
+  const normalized = safeStatus.toUpperCase().replace(/\s+/g, '_');
 
   let style = 'bg-slate-100 text-slate-700 border-slate-200';
   let dotColor = 'bg-slate-400';
@@ -33,7 +34,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, size = 'md' })
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-md border ${padding} ${style}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${dotColor}`}></span>
-      {status.replace(/_/g, ' ')}
+      {safeStatus.replace(/_/g, ' ')}
     </span>
   );
 };
