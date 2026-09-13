@@ -66,17 +66,54 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err) {
       console.warn('Login API fallback, setting demo user locally');
       // Local fallback for demo reliability
-      let demoUser: User = {
-        id: 1,
-        emp_id: empId,
-        name: empId === 'hod001' ? 'Keval Rana' : (empId === 'elec001' ? 'Rahul Patel' : (empId === 'sig001' ? 'Amit Shah' : (empId === 'civil001' ? 'Rajesh Sharma' : 'Officer'))),
-        email: `${empId}@railnet.gov.in`,
-        role: (empId === 'hod001' ? 'HIGHER_HOD' : (empId === 'admin001' ? 'ADMIN' : 'LOWER_HOD')) as UserRole,
-        department_id: empId === 'elec001' ? 1 : (empId === 'sig001' ? 2 : (empId === 'civil001' ? 3 : 6)),
-        department_code: empId === 'elec001' ? 'ELEC' : (empId === 'sig001' ? 'SIG' : (empId === 'civil001' ? 'CIVIL' : 'ALL')),
-        department_name: empId === 'elec001' ? 'Electrical Department' : (empId === 'sig001' ? 'Signal Department' : (empId === 'civil001' ? 'Civil Department' : 'All Departments')),
-        is_active: true
+      const lowerMap: Record<string, { name: string; deptId: number; deptCode: string; deptName: string }> = {
+        elec001: { name: 'Rahul Patel', deptId: 1, deptCode: 'ELEC', deptName: 'Electrical Department (TRD / OHE)' },
+        sig001: { name: 'Amit Shah', deptId: 2, deptCode: 'SIG', deptName: 'Signalling Department (SMMS)' },
+        civil001: { name: 'Rajesh Sharma', deptId: 3, deptCode: 'CIVIL', deptName: 'Civil Engineering (TMS Track)' },
+        tel001: { name: 'Vikram Verma', deptId: 4, deptCode: 'TEL', deptName: 'Telecommunications' },
+        mech001: { name: 'Sunil Mehta', deptId: 5, deptCode: 'MECH', deptName: 'Mechanical Department (C&W)' },
       };
+
+      const lowerInfo = lowerMap[empId.toLowerCase()];
+      let demoUser: User;
+
+      if (empId.toLowerCase() === 'hod001') {
+        demoUser = {
+          id: 1,
+          emp_id: 'hod001',
+          name: 'Keval Rana',
+          email: 'keval.rana@railnet.gov.in',
+          role: 'HIGHER_HOD',
+          department_id: 6,
+          department_code: 'ALL',
+          department_name: 'Head of All Departments',
+          is_active: true
+        };
+      } else if (empId.toLowerCase() === 'admin001') {
+        demoUser = {
+          id: 6,
+          emp_id: 'admin001',
+          name: 'System Administrator',
+          email: 'admin@railnet.gov.in',
+          role: 'ADMIN',
+          department_id: 6,
+          department_code: 'ALL',
+          department_name: 'CRIS / IR Operations',
+          is_active: true
+        };
+      } else {
+        demoUser = {
+          id: lowerInfo?.deptId || 1,
+          emp_id: empId,
+          name: lowerInfo?.name || 'Railway Officer',
+          email: `${empId}@railnet.gov.in`,
+          role: 'LOWER_HOD',
+          department_id: lowerInfo?.deptId || 1,
+          department_code: lowerInfo?.deptCode || 'ELEC',
+          department_name: lowerInfo?.deptName || 'Electrical Department',
+          is_active: true
+        };
+      }
       setUser(demoUser);
       localStorage.setItem('railway_token', empId);
       localStorage.setItem('railway_user', JSON.stringify(demoUser));

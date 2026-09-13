@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { MaintenanceRequest } from '../../types';
 import api from '../../api/client';
+import { FALLBACK_REQUESTS } from '../../api/fallbackData';
 import { BreadcrumbContext } from '../../components/layout/BreadcrumbContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import {
@@ -18,8 +19,15 @@ import {
 
 export const RequestHistory: React.FC = () => {
   const { user } = useAuth();
-  const [requests, setRequests] = useState<MaintenanceRequest[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [requests, setRequests] = useState<MaintenanceRequest[]>(() => {
+    const deptId = user?.department_id;
+    if (deptId && deptId !== 6) {
+      const filtered = FALLBACK_REQUESTS.filter(r => Number(r.department_id) === Number(deptId));
+      return filtered.length > 0 ? filtered : FALLBACK_REQUESTS;
+    }
+    return FALLBACK_REQUESTS;
+  });
+  const [loading, setLoading] = useState(false);
 
   // Filters
   const [statusFilter, setStatusFilter] = useState('ALL');
@@ -34,7 +42,9 @@ export const RequestHistory: React.FC = () => {
     api.get<MaintenanceRequest[]>('/requests', {
       params: { department_id: user?.department_id, limit: 100 }
     }).then(res => {
-      setRequests(res.data);
+      if (res.data && Array.isArray(res.data)) {
+        setRequests(res.data);
+      }
     }).catch(console.error)
       .finally(() => setLoading(false));
   }, [user?.department_id]);

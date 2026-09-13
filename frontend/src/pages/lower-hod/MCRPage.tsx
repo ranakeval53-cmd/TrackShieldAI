@@ -48,7 +48,7 @@ export const MCRPage: React.FC = () => {
     // Fetch requests ready for MCR
     api.get<MaintenanceRequest[]>('/requests', { params: { department_id: user?.department_id } })
       .then(res => {
-        const data = res.data && res.data.length > 0 ? res.data : FALLBACK_REQUESTS;
+        const data = res.data && Array.isArray(res.data) && res.data.length > 0 ? res.data : FALLBACK_REQUESTS;
         setRequests(data);
         if (prefillRequestId) {
           const matched = data.find(r => r.id === Number(prefillRequestId));
@@ -75,7 +75,9 @@ export const MCRPage: React.FC = () => {
 
     // Fetch existing MCRs
     api.get<MCRReport[]>('/mcr', { params: { department_id: user?.department_id } })
-      .then(res => setSubmittedMCRs(res.data))
+      .then(res => {
+        if (res.data && Array.isArray(res.data)) setSubmittedMCRs(res.data);
+      })
       .catch(() => {});
   }, [user?.department_id, prefillRequestId]);
 

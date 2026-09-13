@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { MaintenanceRequest, RequestStatus } from '../../types';
 import api from '../../api/client';
+import { FALLBACK_REQUESTS } from '../../api/fallbackData';
 import { BreadcrumbContext } from '../../components/layout/BreadcrumbContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { ReportDelayModal } from '../../components/modals/ReportDelayModal';
@@ -22,9 +23,16 @@ export const MyWork: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const [requests, setRequests] = useState<MaintenanceRequest[]>([]);
+  const [requests, setRequests] = useState<MaintenanceRequest[]>(() => {
+    const deptId = user?.department_id;
+    if (deptId && deptId !== 6) {
+      const filtered = FALLBACK_REQUESTS.filter(r => Number(r.department_id) === Number(deptId));
+      return filtered.length > 0 ? filtered : FALLBACK_REQUESTS;
+    }
+    return FALLBACK_REQUESTS;
+  });
   const [activeTab, setActiveTab] = useState<string>('ALL');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   // Modal states
   const [delayModalOpen, setDelayModalOpen] = useState(false);
@@ -39,7 +47,9 @@ export const MyWork: React.FC = () => {
       const res = await api.get<MaintenanceRequest[]>('/requests', {
         params: { department_id: user?.department_id }
       });
-      setRequests(res.data);
+      if (res.data && Array.isArray(res.data)) {
+        setRequests(res.data);
+      }
     } catch (err) {
       console.error(err);
     } finally {

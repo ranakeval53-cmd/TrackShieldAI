@@ -71,7 +71,7 @@ export const ReportProblem: React.FC = () => {
     // 1. Fetch Corridors
     try {
       const cRes = await api.get<Corridor[]>('/master/corridors?limit=50');
-      if (cRes.data && cRes.data.length > 0) {
+      if (cRes.data && Array.isArray(cRes.data) && cRes.data.length > 0) {
         setCorridors(cRes.data);
         setIsLiveSync(true);
       }
@@ -84,7 +84,7 @@ export const ReportProblem: React.FC = () => {
       const aRes = await api.get<Asset[]>('/master/assets', {
         params: { department_id: user?.department_id, limit: 100 }
       });
-      if (aRes.data && aRes.data.length > 0) {
+      if (aRes.data && Array.isArray(aRes.data) && aRes.data.length > 0) {
         setAssets(aRes.data);
         setAssetId(aRes.data[0].id);
         setAssetCriticality(aRes.data[0].criticality);
@@ -98,6 +98,9 @@ export const ReportProblem: React.FC = () => {
         if (fbAssets.length > 0) {
           setAssetId(fbAssets[0].id);
           setAssetCriticality(fbAssets[0].criticality);
+          if (fbAssets[0].corridor_id) {
+            setCorridorId(fbAssets[0].corridor_id);
+          }
         }
       }
     } catch {
@@ -106,6 +109,9 @@ export const ReportProblem: React.FC = () => {
       if (fbAssets.length > 0) {
         setAssetId(fbAssets[0].id);
         setAssetCriticality(fbAssets[0].criticality);
+        if (fbAssets[0].corridor_id) {
+          setCorridorId(fbAssets[0].corridor_id);
+        }
       }
     }
   };

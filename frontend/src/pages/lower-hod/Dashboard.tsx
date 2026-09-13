@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { MaintenanceRequest, NotificationItem } from '../../types';
 import api from '../../api/client';
+import { FALLBACK_REQUESTS } from '../../api/fallbackData';
 import { BreadcrumbContext } from '../../components/layout/BreadcrumbContext';
 import { KPICard } from '../../components/common/KPICard';
 import { StatusBadge } from '../../components/common/StatusBadge';
@@ -21,9 +22,16 @@ import {
 
 export const LowerHODDashboard: React.FC = () => {
   const { user } = useAuth();
-  const [requests, setRequests] = useState<MaintenanceRequest[]>([]);
+  const [requests, setRequests] = useState<MaintenanceRequest[]>(() => {
+    const deptId = user?.department_id;
+    if (deptId && deptId !== 6) {
+      const filtered = FALLBACK_REQUESTS.filter(r => Number(r.department_id) === Number(deptId));
+      return filtered.length > 0 ? filtered : FALLBACK_REQUESTS;
+    }
+    return FALLBACK_REQUESTS;
+  });
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -40,8 +48,8 @@ export const LowerHODDashboard: React.FC = () => {
           params: { department_id: user?.department_id }
         })
       ]);
-      setRequests(reqRes.data);
-      setNotifications(notifRes.data);
+      if (reqRes.data && Array.isArray(reqRes.data)) setRequests(reqRes.data);
+      if (notifRes.data && Array.isArray(notifRes.data)) setNotifications(notifRes.data);
     } catch (err) {
       console.error('Failed to load dashboard', err);
     } finally {
