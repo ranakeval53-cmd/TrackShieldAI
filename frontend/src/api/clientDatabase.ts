@@ -455,15 +455,85 @@ export const handleClientDatabaseFallback = (config?: AxiosRequestConfig): Axios
   // --- 6. Analytics & Live Operations ---
   if (pathname === '/analytics/dashboard' || pathname === 'analytics/dashboard') {
     const reqs = getStoredRequests();
+    const blocks = getStoredBlocks();
+    const assets = (dbDump.assets || []) as any[];
+    const corridors = (dbDump.corridors || []) as any[];
+    const depts = (dbDump.departments || []).filter((d: any) => d.code !== 'ALL');
+
+    const total_requests = reqs.length;
+    const pending_approval = reqs.filter(r => ['NEW', 'INSPECTED', 'AI_ANALYZED'].includes(r.status)).length;
+    const critical_problems = reqs.filter(r => r.priority === 'CRITICAL' && r.status !== 'CLOSED').length;
+    const active_maintenance = reqs.filter(r => r.status === 'IN_PROGRESS').length;
+    const delayed_work = reqs.filter(r => r.status === 'DELAYED').length;
+    const completed_work = reqs.filter(r => ['VERIFIED', 'CLOSED'].includes(r.status)).length;
+    const mcr_pending = reqs.filter(r => r.status === 'MCR_SUBMITTED').length;
+
+    const healthy_assets = assets.filter(a => a.status === 'HEALTHY').length;
+    const asset_availability_percent = assets.length > 0 ? Math.round((healthy_assets / assets.length) * 1000) / 10 : 98.4;
+
+    const department_metrics = depts.map((d: any) => {
+      const dReqs = reqs.filter(r => r.department_id === d.id);
+      return {
+        department: d.name,
+        code: d.code,
+        total_requests: dReqs.length,
+        critical: dReqs.filter(r => r.priority === 'CRITICAL').length,
+        pending: dReqs.filter(r => ['NEW', 'INSPECTED', 'AI_ANALYZED'].includes(r.status)).length,
+        in_progress: dReqs.filter(r => r.status === 'IN_PROGRESS').length,
+        delayed: dReqs.filter(r => r.status === 'DELAYED').length,
+        completed: dReqs.filter(r => ['VERIFIED', 'CLOSED'].includes(r.status)).length
+      };
+    });
+
+    const corridor_status = corridors.slice(0, 10).map((c: any) => {
+      const active_blocks = blocks.filter(b => b.corridor_id === c.id && ['ACTIVE', 'APPROVED', 'AI_RECOMMENDED'].includes(b.status)).length;
+      const corr_assets = assets.filter(a => a.corridor_id === c.id).length;
+      const open_requests = reqs.filter(r => r.corridor_id === c.id && r.status !== 'CLOSED').length;
+      return {
+        id: c.id,
+        code: c.code,
+        name: c.name,
+        track_type: c.track_type,
+        status: (c.status || 'NORMAL') as any,
+        distance_km: c.distance_km,
+        active_blocks,
+        total_assets: corr_assets,
+        open_requests,
+        train_impact: c.status === 'CRITICAL' ? 'HIGH' : (c.status === 'MAINTENANCE' ? 'MEDIUM' : 'LOW')
+      };
+    });
+
+    const critical_alerts = [
+      {
+        id: 'emg-1',
+        type: 'CRITICAL',
+        title: '🔴 EMERGENCY: Point Machine S-102 Jammed',
+        corridor: 'New Delhi → Ghaziabad Junction',
+        train_impact: 'HIGH',
+        recommended_action: 'Deploy emergency S&T maintenance gang immediately.'
+      },
+      {
+        id: 'conf-1',
+        type: 'HIGH',
+        title: '🟠 Track & OHE Multi-Department Window Alignment Needed',
+        corridor: 'Ghaziabad Junction → Aligarh Junction',
+        train_impact: 'MEDIUM',
+        recommended_action: 'Adjust block scheduling window using AI Block Planner.'
+      }
+    ];
+
     return makeResponse({
-      total_requests: reqs.length,
-      pending_approvals: reqs.filter(r => r.status === 'NEW').length,
-      active_blocks: 4,
-      completed_this_week: reqs.filter(r => ['VERIFIED', 'CLOSED', 'MCR_SUBMITTED'].includes(r.status)).length,
-      conflicts_detected: 4,
-      conflicts_resolved: 4,
-      punctuality_impact_pct: 98.6,
-      average_block_duration_hours: 2.1
+      total_requests,
+      pending_approval,
+      critical_problems,
+      active_maintenance,
+      delayed_work,
+      asset_availability_percent,
+      completed_work,
+      mcr_pending,
+      corridor_status,
+      department_metrics,
+      critical_alerts
     });
   }
 
